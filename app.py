@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
-import os
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,6 +18,10 @@ BASE_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 EXPERT_FRONTEND_DIR = FRONTEND_DIR / "expert"
 STATIC_DIR = FRONTEND_DIR / "static"
+CASES_PATH = BASE_DIR / "data" / "expert_cases.json"
+EVAL_DB_PATH = BASE_DIR / "data" / "expert_evaluations.sqlite"
+
+_cases_data: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -77,18 +81,27 @@ def session_ids_for_department(dept: ExpertDepartment) -> list[int]:
     ]
 
 
-def db_path() -> Path:
-    from_env = os.getenv("EXPERT_DB_PATH", "").strip()
-    if from_env:
-        return Path(from_env)
-    return BASE_DIR.parent / "hospital.db"
+def load_cases() -> dict[str, Any]:
+    global _cases_data
+    if _cases_data is not None:
+        return _cases_data
+    if not CASES_PATH.exists():
+        raise HTTPException(
+            status_code=500,
+            detail=f"Cases data not found: {CASES_PATH}. Run scripts/export_cases_to_json.py if needed.",
+        )
+    _cases_data = json.loads(CASES_PATH.read_text(encoding="utf-8"))
+    return _cases_data
+
+
+def session_has_messages(session_id: int) -> bool:
+    cases = load_cases()
+    return str(session_id) in cases.get("messages_by_session", {})
 
 
 def get_conn() -> sqlite3.Connection:
-    path = db_path()
-    if not path.exists():
-        raise HTTPException(status_code=500, detail=f"Database not found: {path}")
-    conn = sqlite3.connect(str(path))
+    EVAL_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(EVAL_DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -124,34 +137,31 @@ def ensure_tables() -> None:
         conn.close()
 
 
-def sessions_with_messages(conn: sqlite3.Connection, session_ids: list[int]) -> set[int]:
-    if not session_ids:
-        return set()
-    placeholders = ",".join(["?"] * len(session_ids))
-    rows = conn.execute(
-        f"""
-        SELECT DISTINCT session_id
-        FROM chat_messages
-        WHERE session_id IN ({placeholders})
-          AND role IN ('user', 'assistant')
-        """,
-        session_ids,
-    ).fetchall()
-    return {int(r["session_id"]) for r in rows}
-
-
-def department_active_ids(conn: sqlite3.Connection, dept_id: str) -> tuple[ExpertDepartment, list[int]]:
+def department_active_ids(dept_id: str) -> tuple[ExpertDepartment, list[int]]:
     dept = get_department(dept_id)
     if dept is None:
         raise HTTPException(status_code=404, detail="القسم غير موجود")
-    ids = session_ids_for_department(dept)
-    with_msgs = sessions_with_messages(conn, ids)
-    active = [sid for sid in ids if sid in with_msgs]
+    cases = load_cases()
+    active = [int(sid) for sid in cases.get("departments", {}).get(dept_id, [])]
+    if not active:
+        ids = session_ids_for_department(dept)
+        active = [sid for sid in ids if session_has_messages(sid)]
     return dept, active
 
 
 def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return {k: row[k] for k in row.keys()}
+
+
+def evaluated_session_ids(conn: sqlite3.Connection, active: list[int]) -> set[int]:
+    if not active:
+        return set()
+    placeholders = ",".join(["?"] * len(active))
+    rows = conn.execute(
+        f"SELECT session_id FROM expert_evaluations WHERE session_id IN ({placeholders})",
+        active,
+    ).fetchall()
+    return {int(r["session_id"]) for r in rows}
 
 
 app = FastAPI(title="Expert Evaluation Standalone")
@@ -161,12 +171,20 @@ if STATIC_DIR.exists():
 
 @app.on_event("startup")
 def startup() -> None:
+    load_cases()
     ensure_tables()
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "db": str(db_path())}
+    cases = load_cases()
+    session_count = len(cases.get("messages_by_session", {}))
+    return {
+        "status": "ok",
+        "cases_source": str(CASES_PATH),
+        "case_sessions": str(session_count),
+        "evaluations_db": str(EVAL_DB_PATH),
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -198,43 +216,27 @@ def expert_case() -> HTMLResponse:
 
 @app.get("/api/expert/departments")
 def api_departments() -> list[dict[str, Any]]:
-    conn = get_conn()
-    try:
-        all_ids: list[int] = []
-        for dept in EXPERT_DEPARTMENTS:
-            all_ids.extend(session_ids_for_department(dept))
-        with_msgs = sessions_with_messages(conn, all_ids)
-        out = []
-        for dept in EXPERT_DEPARTMENTS:
-            ids = session_ids_for_department(dept)
-            count = len([sid for sid in ids if sid in with_msgs])
-            out.append(
-                {
-                    "id": dept.id,
-                    "name_ar": dept.name_ar,
-                    "icon": dept.icon,
-                    "case_count": count,
-                }
-            )
-        return out
-    finally:
-        conn.close()
+    load_cases()
+    out = []
+    for dept in EXPERT_DEPARTMENTS:
+        _, active = department_active_ids(dept.id)
+        out.append(
+            {
+                "id": dept.id,
+                "name_ar": dept.name_ar,
+                "icon": dept.icon,
+                "case_count": len(active),
+            }
+        )
+    return out
 
 
 @app.get("/api/expert/departments/{dept_id}/summary")
 def api_summary(dept_id: str) -> dict[str, Any]:
     conn = get_conn()
     try:
-        dept, active = department_active_ids(conn, dept_id)
-        if active:
-            placeholders = ",".join(["?"] * len(active))
-            rows = conn.execute(
-                f"SELECT session_id FROM expert_evaluations WHERE session_id IN ({placeholders})",
-                active,
-            ).fetchall()
-            evaluated = {int(r["session_id"]) for r in rows}
-        else:
-            evaluated = set()
+        dept, active = department_active_ids(dept_id)
+        evaluated = evaluated_session_ids(conn, active)
         total = len(active)
         done = len(evaluated)
         return {
@@ -254,16 +256,8 @@ def api_summary(dept_id: str) -> dict[str, Any]:
 def api_cases(dept_id: str) -> list[dict[str, Any]]:
     conn = get_conn()
     try:
-        _, active = department_active_ids(conn, dept_id)
-        if active:
-            placeholders = ",".join(["?"] * len(active))
-            rows = conn.execute(
-                f"SELECT session_id FROM expert_evaluations WHERE session_id IN ({placeholders})",
-                active,
-            ).fetchall()
-            evaluated = {int(r["session_id"]) for r in rows}
-        else:
-            evaluated = set()
+        _, active = department_active_ids(dept_id)
+        evaluated = evaluated_session_ids(conn, active)
         return [
             {"case_number": i + 1, "session_id": sid, "evaluated": sid in evaluated}
             for i, sid in enumerate(active)
@@ -276,7 +270,7 @@ def api_cases(dept_id: str) -> list[dict[str, Any]]:
 def api_csv(dept_id: str) -> Response:
     conn = get_conn()
     try:
-        dept, active = department_active_ids(conn, dept_id)
+        dept, active = department_active_ids(dept_id)
         if not active:
             raise HTTPException(status_code=404, detail="لا توجد حالات في هذا القسم")
         placeholders = ",".join(["?"] * len(active))
@@ -325,33 +319,21 @@ def api_csv(dept_id: str) -> Response:
 
 @app.get("/api/expert/sessions/{session_id}/messages")
 def api_messages(session_id: int, dept_id: str) -> list[dict[str, Any]]:
-    conn = get_conn()
-    try:
-        _, active = department_active_ids(conn, dept_id)
-        if session_id not in active:
-            raise HTTPException(status_code=404, detail="الجلسة غير ضمن هذا القسم")
-        rows = conn.execute(
-            """
-            SELECT id, role, content, created_at
-            FROM chat_messages
-            WHERE session_id = ?
-              AND role IN ('user', 'assistant')
-            ORDER BY created_at ASC
-            """,
-            (session_id,),
-        ).fetchall()
-        if not rows:
-            raise HTTPException(status_code=404, detail="لا توجد رسائل لهذه الجلسة")
-        return [row_to_dict(r) for r in rows]
-    finally:
-        conn.close()
+    _, active = department_active_ids(dept_id)
+    if session_id not in active:
+        raise HTTPException(status_code=404, detail="الجلسة غير ضمن هذا القسم")
+    cases = load_cases()
+    rows = cases.get("messages_by_session", {}).get(str(session_id), [])
+    if not rows:
+        raise HTTPException(status_code=404, detail="لا توجد رسائل لهذه الجلسة")
+    return rows
 
 
 @app.get("/api/expert/sessions/{session_id}/evaluation")
 def api_get_eval(session_id: int, dept_id: str) -> dict[str, Any] | None:
     conn = get_conn()
     try:
-        _, active = department_active_ids(conn, dept_id)
+        _, active = department_active_ids(dept_id)
         if session_id not in active:
             raise HTTPException(status_code=404, detail="الجلسة غير ضمن هذا القسم")
         row = conn.execute(
@@ -367,18 +349,10 @@ def api_get_eval(session_id: int, dept_id: str) -> dict[str, Any] | None:
 def api_save_eval(session_id: int, dept_id: str, body: ExpertEvaluationSave) -> dict[str, Any]:
     conn = get_conn()
     try:
-        dept, active = department_active_ids(conn, dept_id)
+        dept, active = department_active_ids(dept_id)
         if session_id not in active:
             raise HTTPException(status_code=404, detail="الجلسة غير ضمن هذا القسم")
-        exists = conn.execute(
-            """
-            SELECT 1 FROM chat_messages
-            WHERE session_id = ? AND role IN ('user', 'assistant')
-            LIMIT 1
-            """,
-            (session_id,),
-        ).fetchone()
-        if not exists:
+        if not session_has_messages(session_id):
             raise HTTPException(status_code=404, detail="لا توجد رسائل لهذه الجلسة")
         data = body.model_dump()
         now = datetime.utcnow().isoformat()
@@ -410,19 +384,15 @@ def api_save_eval(session_id: int, dept_id: str, body: ExpertEvaluationSave) -> 
 
 @app.get("/api/expert/sessions/{session_id}/navigation")
 def api_nav(session_id: int, dept_id: str) -> dict[str, Any]:
-    conn = get_conn()
-    try:
-        _, active = department_active_ids(conn, dept_id)
-        if session_id not in active:
-            raise HTTPException(status_code=404, detail="الجلسة غير ضمن هذا القسم")
-        idx = active.index(session_id)
-        return {
-            "dept_id": dept_id,
-            "session_id": session_id,
-            "previous_session_id": active[idx - 1] if idx > 0 else None,
-            "next_session_id": active[idx + 1] if idx < len(active) - 1 else None,
-            "case_number": idx + 1,
-            "total_cases": len(active),
-        }
-    finally:
-        conn.close()
+    _, active = department_active_ids(dept_id)
+    if session_id not in active:
+        raise HTTPException(status_code=404, detail="الجلسة غير ضمن هذا القسم")
+    idx = active.index(session_id)
+    return {
+        "dept_id": dept_id,
+        "session_id": session_id,
+        "previous_session_id": active[idx - 1] if idx > 0 else None,
+        "next_session_id": active[idx + 1] if idx < len(active) - 1 else None,
+        "case_number": idx + 1,
+        "total_cases": len(active),
+    }

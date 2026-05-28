@@ -7,3 +7,4 @@ __pycache__/
 .env.*
 hospital.db
 *.db-journal
+data/expert_evaluations.sqlite
