@@ -22,6 +22,13 @@ This folder is fully dedicated to the expert evaluation website (`/expert`) and 
 
 Doctor evaluations are saved locally in `data/expert_evaluations.sqlite` (created automatically; not committed to git).
 
+## Deploy on Render
+
+- **Start command:** `uvicorn app:app --host 0.0.0.0 --port $PORT`
+- **Build command:** `pip install -r requirements.txt`
+- **Python version:** `3.11.9` via `.python-version` (Render ignores `runtime.txt`; that file is for Heroku)
+- If the build still picks 3.14, set environment variable `PYTHON_VERSION` = `3.11.9` in Render → Environment
+
 ## Deploy (GitHub + domain)
 
 1. Push this repo to GitHub (cases are already in `data/expert_cases.json`).
