@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>تقييم المحادثة</title>
+  <link rel="stylesheet" href="/static/expert.css" />
+</head>
+<body>
+  <div class="container" id="top">
+    <div class="nav-bar">
+      <div>
+        <button type="button" class="btn btn-secondary" id="btn-back-dept">← العودة للقسم</button>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+        <button type="button" class="btn btn-secondary" id="btn-prev" disabled>الحالة السابقة</button>
+        <button type="button" class="btn btn-secondary" id="btn-next" disabled>الحالة التالية</button>
+      </div>
+    </div>
+    <p class="case-meta" id="case-meta"></p>
+    <section class="chat-panel" id="chat-messages">جاري تحميل المحادثة...</section>
+    <section class="rubric-panel">
+      <h2>نموذج التقييم الطبي (Rubric)</h2>
+      <form id="eval-form">
+        <div id="rubric-accordion"></div>
+        <h3 style="margin-top:1.25rem;font-size:1.1rem">ملاحظات الطبيب</h3>
+        <textarea id="doctor-notes" class="notes-area" placeholder="ملاحظات إضافية (اختياري)..."></textarea>
+        <div style="margin-top:1.25rem;text-align:center">
+          <button type="submit" class="btn btn-primary" id="btn-save">حفظ التقييم</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  <script src="/static/expert.js"></script>
+  <script>
+    (async function () {
+      const deptId = qs("dept");
+      const sessionId = parseInt(qs("session_id") || "", 10);
+      if (!deptId || !sessionId) {
+        window.location.href = "/expert";
+        return;
+      }
+
+      const titles = {
+        neurology: "طب الأعصاب",
+        ophthalmology: "طب العيون",
+        ent: "الأنف والأذن والحنجرة",
+        gi: "أمراض الجهاز الهضمي",
+        chest: "أمراض الصدر",
+      };
+
+      document.getElementById("btn-back-dept").onclick = () => {
+        window.location.href = `/expert/department?dept=${encodeURIComponent(deptId)}`;
+      };
+
+      function scrollTop() {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        document.getElementById("top").scrollIntoView({ behavior: "smooth" });
+      }
+
+      async function loadCase(sid) {
+        scrollTop();
+        const chatEl = document.getElementById("chat-messages");
+        chatEl.innerHTML = "جاري التحميل...";
+
+        const [messages, evaluation, nav] = await Promise.all([
+          apiGet(`${API}/sessions/${sid}/messages?dept_id=${encodeURIComponent(deptId)}`),
+          apiGet(`${API}/sessions/${sid}/evaluation?dept_id=${encodeURIComponent(deptId)}`),
+          apiGet(`${API}/sessions/${sid}/navigation?dept_id=${encodeURIComponent(deptId)}`),
+        ]);
+
+        document.getElementById("case-meta").textContent =
+          `${titles[deptId] || ""} — Case ${nav.case_number} من ${nav.total_cases} — Session ${sid}`;
+
+        renderChat(chatEl, messages);
+
+        buildRubricForm(document.getElementById("rubric-accordion"), evaluation);
+        const notes = document.getElementById("doctor-notes");
+        notes.value = (evaluation && evaluation.doctor_notes) || "";
+
+        const prev = document.getElementById("btn-prev");
+        const next = document.getElementById("btn-next");
+        prev.disabled = !nav.previous_session_id;
+        next.disabled = !nav.next_session_id;
+        prev.onclick = () => {
+          if (nav.previous_session_id) go(nav.previous_session_id);
+        };
+        next.onclick = () => {
+          if (nav.next_session_id) go(nav.next_session_id);
+        };
+
+        history.replaceState(
+          {},
+          "",
+          `/expert/case?dept=${encodeURIComponent(deptId)}&session_id=${sid}`,
+        );
+      }
+
+      function go(sid) {
+        loadCase(sid).catch((e) => alert(e.message));
+      }
+
+      document.getElementById("eval-form").onsubmit = async (ev) => {
+        ev.preventDefault();
+        try {
+          const body = collectRubricScores();
+          const sid = parseInt(new URLSearchParams(location.search).get("session_id"), 10);
+          await apiPut(
+            `${API}/sessions/${sid}/evaluation?dept_id=${encodeURIComponent(deptId)}`,
+            body,
+          );
+          showToast("تم حفظ التقييم بنجاح");
+        } catch (e) {
+          alert(e.message);
+        }
+      };
+
+      try {
+        await loadCase(sessionId);
+      } catch (e) {
+        document.getElementById("chat-messages").innerHTML =
+          `<p style="color:#c00">${esc(e.message)}</p>`;
+      }
+    })();
+  </script>
+</body>
+</html>

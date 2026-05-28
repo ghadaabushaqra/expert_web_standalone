@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>قائمة الحالات — تقييم المحادثات</title>
+  <link rel="stylesheet" href="/static/expert.css" />
+</head>
+<body>
+  <div class="container">
+    <p class="breadcrumb"><a href="/expert">← الأقسام</a></p>
+    <header class="header">
+      <h1 id="dept-title">قائمة الحالات</h1>
+      <p id="dept-sub">اختر حالة للمراجعة والتقييم</p>
+    </header>
+    <section id="export-panel" class="export-panel" hidden>
+      <h2>تصدير تقييمات القسم</h2>
+      <p id="export-stats" class="export-stats"></p>
+      <p class="export-hint">بعد الانتهاء من تقييم الحالات، نزّل ملف CSV وأرسله لفريق المشروع.</p>
+      <a id="btn-csv" class="btn btn-primary" href="#">تنزيل ملف CSV</a>
+    </section>
+    <div id="case-list" class="case-list loading">جاري التحميل...</div>
+  </div>
+  <script src="/static/expert.js"></script>
+  <script>
+    (async function () {
+      const deptId = qs("dept");
+      if (!deptId) {
+        window.location.href = "/expert";
+        return;
+      }
+      const list = document.getElementById("case-list");
+      const titles = {
+        neurology: "طب الأعصاب",
+        ophthalmology: "طب العيون",
+        ent: "الأنف والأذن والحنجرة",
+        gi: "أمراض الجهاز الهضمي",
+        chest: "أمراض الصدر",
+      };
+      document.getElementById("dept-title").textContent = titles[deptId] || "القسم";
+      try {
+        const summary = await apiGet(`${API}/departments/${deptId}/summary`);
+        const exportPanel = document.getElementById("export-panel");
+        const exportStats = document.getElementById("export-stats");
+        const btnCsv = document.getElementById("btn-csv");
+        exportPanel.hidden = false;
+        exportStats.textContent = `تم تقييم ${summary.evaluated_count} من ${summary.total_cases} حالة`;
+        btnCsv.href = summary.csv_download_url;
+        if (summary.all_evaluated) {
+          exportPanel.classList.add("export-panel--complete");
+          exportStats.textContent += " — اكتمل تقييم القسم ✓";
+        }
+
+        const cases = await apiGet(`${API}/departments/${deptId}/cases`);
+        list.classList.remove("loading");
+        list.innerHTML = "";
+        if (!cases.length) {
+          list.innerHTML = "<p class='loading'>لا توجد محادثات في هذا النطاق.</p>";
+          return;
+        }
+        cases.forEach((c) => {
+          const card = document.createElement("div");
+          card.className = "case-card";
+          card.onclick = () => {
+            window.location.href = `/expert/case?dept=${encodeURIComponent(deptId)}&session_id=${c.session_id}`;
+          };
+          const badge = c.evaluated
+            ? '<span class="badge badge-done">تم التقييم</span>'
+            : '<span class="badge badge-pending">غير مقيم</span>';
+          card.innerHTML = `
+            <div>
+              <h3>Case ${c.case_number}</h3>
+              <span class="sid">Session ID: ${c.session_id}</span>
+            </div>
+            ${badge}
+          `;
+          list.appendChild(card);
+        });
+      } catch (e) {
+        list.innerHTML = `<p style="color:#c00">${esc(e.message)}</p>`;
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+.env
+.env.*
+hospital.db
+*.db-journal

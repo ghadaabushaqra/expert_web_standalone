@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>تقييم المحادثات الطبية — الأقسام</title>
+  <link rel="stylesheet" href="/static/expert.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>تقييم المحادثات الطبية</h1>
+      <p>واجهة الأطباء الخبراء — اختر القسم لبدء التقييم</p>
+    </header>
+    <div id="dept-grid" class="dept-grid loading">جاري التحميل...</div>
+  </div>
+  <script src="/static/expert.js"></script>
+  <script>
+    (async function () {
+      const grid = document.getElementById("dept-grid");
+      try {
+        const depts = await apiGet(`${API}/departments`);
+        grid.classList.remove("loading");
+        grid.innerHTML = "";
+        depts.forEach((d) => {
+          const card = document.createElement("a");
+          card.className = "dept-card";
+          card.href = `/expert/department?dept=${encodeURIComponent(d.id)}`;
+          card.innerHTML = `
+            <div class="icon">${d.icon}</div>
+            <h2>${esc(d.name_ar)}</h2>
+            <p class="count">${d.case_count} حالة</p>
+          `;
+          grid.appendChild(card);
+        });
+      } catch (e) {
+        grid.innerHTML = `<p style="color:#c00">تعذر التحميل. تأكد من تشغيل الباكند على المنفذ 8000.<br>${esc(e.message)}</p>`;
+      }
+    })();
+  </script>
+</body>
+</html>
