@@ -267,16 +267,48 @@ a:hover {
   font-size: 0.95rem;
 }
 
-.criteria {
-  margin: 0.75rem 0;
-  font-size: 0.95rem;
-  color: var(--muted);
-  padding-right: 1.1rem;
+.score-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.5rem;
 }
 
-.criteria li {
-  margin-bottom: 0.65rem;
-  list-style: disc;
+.score-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.score-option:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.score-option--selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  box-shadow: 0 0 0 2px rgba(74, 159, 216, 0.25);
+}
+
+.score-option input[type="radio"] {
+  margin-top: 0.35rem;
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.score-option-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .score-line-en {
@@ -284,12 +316,19 @@ a:hover {
   direction: ltr;
   text-align: left;
   color: var(--text);
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.2rem;
+  font-size: 0.95rem;
+  font-weight: 500;
 }
 
 .score-line-ar {
   display: block;
   color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.rubric-block--missing .score-options {
+  border-radius: 8px;
 }
 
 .eval-warning {
@@ -330,21 +369,6 @@ a:hover {
 .badge-incomplete {
   background: #fde8e8;
   color: #c5221f;
-}
-
-.score-row {
-  display: flex;
-  gap: 1.25rem;
-  flex-wrap: wrap;
-  margin-top: 0.75rem;
-}
-
-.score-row label {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  cursor: pointer;
-  font-weight: 500;
 }
 
 .notes-area {

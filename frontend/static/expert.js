@@ -168,12 +168,21 @@ function showToast(msg) {
   setTimeout(() => el.classList.remove("show"), 2800);
 }
 
-function scoreCriteriaHtml(scores) {
+function scoreOptionsHtml(itemKey, scores, selectedVal) {
   return scores
-    .map(
-      (s) =>
-        `<li><span class="score-line-en">${esc(s.en)}</span><span class="score-line-ar">${esc(s.ar)}</span></li>`,
-    )
+    .map((s, i) => {
+      const value = String(i + 1);
+      const checked = selectedVal === value ? "checked" : "";
+      return `
+        <label class="score-option${checked ? " score-option--selected" : ""}">
+          <input type="radio" name="${itemKey}" value="${value}" ${checked} />
+          <span class="score-option-body">
+            <span class="score-line-en">${esc(s.en)}</span>
+            <span class="score-line-ar">${esc(s.ar)}</span>
+          </span>
+        </label>
+      `;
+    })
     .join("");
 }
 
@@ -186,15 +195,20 @@ function buildRubricBlock(item, existing) {
   wrap.innerHTML = `
     <h3 class="rubric-title-en">${esc(item.titleEn)}</h3>
     <h3 class="rubric-title-ar">${esc(item.titleAr)}</h3>
-    <ul class="criteria">${scoreCriteriaHtml(item.scores)}</ul>
-    <div class="score-row" data-field="${item.key}">
-      <label><input type="radio" name="${item.key}" value="1" ${val === "1" ? "checked" : ""}> 1</label>
-      <label><input type="radio" name="${item.key}" value="2" ${val === "2" ? "checked" : ""}> 2</label>
-      <label><input type="radio" name="${item.key}" value="3" ${val === "3" ? "checked" : ""}> 3</label>
+    <div class="score-options" data-field="${item.key}">
+      ${scoreOptionsHtml(item.key, item.scores, val)}
     </div>
   `;
   wrap.querySelectorAll('input[type="radio"]').forEach((input) => {
-    input.addEventListener("change", () => updateEvalUI());
+    input.addEventListener("change", () => {
+      wrap.querySelectorAll(".score-option").forEach((opt) => {
+        opt.classList.toggle(
+          "score-option--selected",
+          opt.querySelector("input")?.checked === true,
+        );
+      });
+      updateEvalUI();
+    });
   });
   return wrap;
 }
