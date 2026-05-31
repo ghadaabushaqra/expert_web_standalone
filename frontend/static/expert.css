@@ -357,16 +357,6 @@ a:hover {
   opacity: 1;
 }
 
-.case-card--incomplete {
-  border-color: #d93025;
-  background: #fff8f8;
-}
-
-.badge-incomplete {
-  background: #fde8e8;
-  color: #c5221f;
-}
-
 .notes-area {
   width: 100%;
   min-height: 100px;
