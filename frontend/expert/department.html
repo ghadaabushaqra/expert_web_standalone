@@ -66,8 +66,7 @@
             cardClass += "";
             badge = '<span class="badge badge-done">تم التقييم</span>';
           } else if (c.status === "incomplete") {
-            cardClass += " case-card--incomplete";
-            badge = '<span class="badge badge-incomplete">تقييم ناقص</span>';
+            badge = '<span class="badge badge-pending">غير مكتمل</span>';
           }
           card.className = cardClass;
           card.onclick = () => {

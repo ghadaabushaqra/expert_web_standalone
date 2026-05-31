@@ -244,38 +244,14 @@ function getMissingRubricFields() {
 
 function updateEvalUI() {
   const missing = getMissingRubricFields();
-  const missingKeys = new Set(missing.map((m) => m.key));
-
-  document.querySelectorAll(".rubric-block[data-field]").forEach((block) => {
-    const field = block.dataset.field;
-    block.classList.toggle("rubric-block--missing", missingKeys.has(field));
-  });
-
-  const warning = document.getElementById("eval-incomplete-warning");
-  if (warning) {
-    warning.hidden = missing.length === 0;
-    if (missing.length > 0) {
-      const labels = missing.map((m) => m.titleAr).join("، ");
-      warning.textContent = `التقييم غير مكتمل — يرجى تقييم: ${labels}`;
-    }
-  }
-
   const saveBtn = document.getElementById("btn-save");
   if (saveBtn) saveBtn.disabled = missing.length > 0;
-}
-
-function scrollToFirstMissing() {
-  const first = document.querySelector(".rubric-block--missing");
-  if (first) {
-    first.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
 }
 
 function collectRubricScores() {
   const missing = getMissingRubricFields();
   if (missing.length > 0) {
     updateEvalUI();
-    scrollToFirstMissing();
     throw new Error("يرجى إكمال جميع معايير التقييم قبل الحفظ");
   }
   const data = {};

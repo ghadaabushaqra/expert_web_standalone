@@ -225,12 +225,6 @@ a:hover {
   background: #fafcfd;
 }
 
-.rubric-block--missing {
-  border-color: #d93025;
-  background: #fff5f5;
-  box-shadow: 0 0 0 2px rgba(217, 48, 37, 0.15);
-}
-
 .rubric-title-en {
   margin: 0 0 0.2rem;
   font-size: 1.05rem;
@@ -325,20 +319,6 @@ a:hover {
   display: block;
   color: var(--muted);
   font-size: 0.95rem;
-}
-
-.rubric-block--missing .score-options {
-  border-radius: 8px;
-}
-
-.eval-warning {
-  background: #fff5f5;
-  border: 1px solid #d93025;
-  color: #b3261e;
-  border-radius: 10px;
-  padding: 0.85rem 1rem;
-  margin-bottom: 1rem;
-  font-weight: 600;
 }
 
 .eval-actions {
