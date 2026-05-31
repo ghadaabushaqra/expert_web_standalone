@@ -28,13 +28,15 @@
         <h3 style="margin-top:1.25rem;font-size:1.1rem">ملاحظات الطبيب</h3>
         <textarea id="doctor-notes" class="notes-area" placeholder="ملاحظات إضافية (اختياري)..."></textarea>
         <div class="eval-actions">
-          <button type="submit" class="btn btn-primary" id="btn-save" disabled>حفظ التقييم</button>
-          <button type="button" class="btn btn-secondary" id="btn-next-case" disabled>الحالة التالية</button>
+          <button type="submit" class="btn btn-primary btn-bilingual" id="btn-save" disabled>
+            <span class="btn-text-en">Save Evaluation</span>
+            <span class="btn-text-ar">حفظ التقييم</span>
+          </button>
+          <button type="button" class="btn btn-secondary btn-bilingual" id="btn-next-case" disabled>
+            <span class="btn-text-en">Next Case</span>
+            <span class="btn-text-ar">الحالة التالية</span>
+          </button>
         </div>
-        <p class="eval-actions-labels">
-          <span>Save Evaluation</span>
-          <span>Next Case</span>
-        </p>
       </form>
     </section>
   </div>
