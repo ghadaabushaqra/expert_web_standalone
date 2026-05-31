@@ -217,47 +217,119 @@ a:hover {
   color: var(--primary-dark);
 }
 
-.accordion-item {
+.rubric-block {
   border: 1px solid var(--border);
   border-radius: 10px;
-  margin-bottom: 0.65rem;
-  overflow: hidden;
-}
-
-.accordion-head {
-  width: 100%;
-  text-align: right;
-  background: var(--primary-light);
-  border: none;
-  padding: 0.9rem 1rem;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  color: var(--text);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.accordion-body {
-  display: none;
+  margin-bottom: 0.85rem;
   padding: 1rem;
   background: #fafcfd;
-  border-top: 1px solid var(--border);
 }
 
-.accordion-item.open .accordion-body {
-  display: block;
+.rubric-block--missing {
+  border-color: #d93025;
+  background: #fff5f5;
+  box-shadow: 0 0 0 2px rgba(217, 48, 37, 0.15);
+}
+
+.rubric-title-en {
+  margin: 0 0 0.2rem;
+  font-size: 1.05rem;
+  color: var(--primary-dark);
+  font-weight: 700;
+  text-align: left;
+  direction: ltr;
+}
+
+.rubric-title-ar {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.chat-level-heading {
+  margin: 1.25rem 0 0.75rem;
+  padding-top: 1rem;
+  border-top: 2px solid var(--border);
+}
+
+.chat-level-label-en {
+  margin: 0 0 0.2rem;
+  font-weight: 700;
+  color: var(--primary-dark);
+  text-align: left;
+  direction: ltr;
+}
+
+.chat-level-label-ar {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
 }
 
 .criteria {
   margin: 0.75rem 0;
   font-size: 0.95rem;
   color: var(--muted);
+  padding-right: 1.1rem;
 }
 
 .criteria li {
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.65rem;
+  list-style: disc;
+}
+
+.score-line-en {
+  display: block;
+  direction: ltr;
+  text-align: left;
+  color: var(--text);
+  margin-bottom: 0.15rem;
+}
+
+.score-line-ar {
+  display: block;
+  color: var(--muted);
+}
+
+.eval-warning {
+  background: #fff5f5;
+  border: 1px solid #d93025;
+  color: #b3261e;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.eval-actions {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.eval-actions-labels {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  gap: 2.5rem;
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  direction: ltr;
+}
+
+.case-card--incomplete {
+  border-color: #d93025;
+  background: #fff8f8;
+}
+
+.badge-incomplete {
+  background: #fde8e8;
+  color: #c5221f;
 }
 
 .score-row {

@@ -8,3 +8,4 @@ __pycache__/
 hospital.db
 *.db-journal
 data/expert_evaluations.sqlite
+data/exports/

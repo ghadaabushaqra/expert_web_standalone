@@ -45,24 +45,22 @@ EXPERT_DEPARTMENTS = [
 RUBRIC_COLUMNS = [
     "clinical_relevance_score",
     "question_specificity_score",
-    "single_question_score",
     "safety_score",
     "linguistic_score",
     "denial_handling_score",
     "department_accuracy_score",
-    "clinical_reasoning_score",
 ]
+
+EXPORT_DIR = BASE_DIR / "data" / "exports"
 
 
 class ExpertEvaluationSave(BaseModel):
     clinical_relevance_score: int = Field(ge=1, le=3)
     question_specificity_score: int = Field(ge=1, le=3)
-    single_question_score: int = Field(ge=1, le=3)
     safety_score: int = Field(ge=1, le=3)
     linguistic_score: int = Field(ge=1, le=3)
     denial_handling_score: int = Field(ge=1, le=3)
     department_accuracy_score: int = Field(ge=1, le=3)
-    clinical_reasoning_score: int = Field(ge=1, le=3)
     doctor_notes: str | None = None
 
 
@@ -153,15 +151,103 @@ def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return {k: row[k] for k in row.keys()}
 
 
-def evaluated_session_ids(conn: sqlite3.Connection, active: list[int]) -> set[int]:
+def is_evaluation_complete(row: sqlite3.Row | dict[str, Any] | None) -> bool:
+    if row is None:
+        return False
+    data = row_to_dict(row) if isinstance(row, sqlite3.Row) else row
+    for col in RUBRIC_COLUMNS:
+        val = data.get(col)
+        if val is None or val == "":
+            return False
+    return True
+
+
+def evaluation_status(row: sqlite3.Row | None) -> str:
+    if row is None:
+        return "pending"
+    if is_evaluation_complete(row):
+        return "complete"
+    return "incomplete"
+
+
+def evaluations_by_session(conn: sqlite3.Connection, active: list[int]) -> dict[int, sqlite3.Row]:
     if not active:
-        return set()
+        return {}
     placeholders = ",".join(["?"] * len(active))
     rows = conn.execute(
-        f"SELECT session_id FROM expert_evaluations WHERE session_id IN ({placeholders})",
+        f"SELECT * FROM expert_evaluations WHERE session_id IN ({placeholders})",
         active,
     ).fetchall()
-    return {int(r["session_id"]) for r in rows}
+    return {int(r["session_id"]): r for r in rows}
+
+
+def build_csv_content(dept: ExpertDepartment, active: list[int], by_sid: dict[int, dict[str, Any]]) -> str:
+    cols = [
+        "case_number",
+        "session_id",
+        "department_name",
+        "evaluated",
+        *RUBRIC_COLUMNS,
+        "doctor_notes",
+        "created_at",
+        "updated_at",
+    ]
+    buf = io.StringIO()
+    buf.write("\ufeff")
+    writer = csv.DictWriter(buf, fieldnames=cols)
+    writer.writeheader()
+    for i, sid in enumerate(active, start=1):
+        ev = by_sid.get(sid)
+        complete = ev and is_evaluation_complete(ev)
+        writer.writerow(
+            {
+                "case_number": i,
+                "session_id": sid,
+                "department_name": dept.name_ar,
+                "evaluated": "yes" if complete else "no",
+                **{k: ev.get(k, "") if ev else "" for k in RUBRIC_COLUMNS},
+                "doctor_notes": ev.get("doctor_notes", "") if ev else "",
+                "created_at": ev.get("created_at", "") if ev else "",
+                "updated_at": ev.get("updated_at", "") if ev else "",
+            }
+        )
+    return buf.getvalue()
+
+
+def sync_csv_exports(conn: sqlite3.Connection) -> None:
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    for dept in EXPERT_DEPARTMENTS:
+        _, active = department_active_ids(dept.id)
+        if not active:
+            continue
+        by_row = evaluations_by_session(conn, active)
+        by_sid = {sid: row_to_dict(r) for sid, r in by_row.items()}
+        content = build_csv_content(dept, active, by_sid)
+        path = EXPORT_DIR / f"expert_evaluations_{dept.id}.csv"
+        path.write_text(content, encoding="utf-8")
+    master_cols_seen: list[dict[str, Any]] = []
+    for dept in EXPERT_DEPARTMENTS:
+        _, active = department_active_ids(dept.id)
+        by_row = evaluations_by_session(conn, active)
+        for sid, row in by_row.items():
+            if is_evaluation_complete(row):
+                master_cols_seen.append(row_to_dict(row))
+    if master_cols_seen:
+        cols = [
+            "session_id",
+            "department_name",
+            *RUBRIC_COLUMNS,
+            "doctor_notes",
+            "created_at",
+            "updated_at",
+        ]
+        buf = io.StringIO()
+        buf.write("\ufeff")
+        writer = csv.DictWriter(buf, fieldnames=cols)
+        writer.writeheader()
+        for ev in sorted(master_cols_seen, key=lambda x: int(x["session_id"])):
+            writer.writerow({k: ev.get(k, "") for k in cols})
+        (EXPORT_DIR / "expert_evaluations_all.csv").write_text(buf.getvalue(), encoding="utf-8")
 
 
 app = FastAPI(title="Expert Evaluation Standalone")
@@ -236,9 +322,9 @@ def api_summary(dept_id: str) -> dict[str, Any]:
     conn = get_conn()
     try:
         dept, active = department_active_ids(dept_id)
-        evaluated = evaluated_session_ids(conn, active)
+        by_row = evaluations_by_session(conn, active)
+        done = sum(1 for sid in active if is_evaluation_complete(by_row.get(sid)))
         total = len(active)
-        done = len(evaluated)
         return {
             "dept_id": dept.id,
             "department_name": dept.name_ar,
@@ -257,11 +343,20 @@ def api_cases(dept_id: str) -> list[dict[str, Any]]:
     conn = get_conn()
     try:
         _, active = department_active_ids(dept_id)
-        evaluated = evaluated_session_ids(conn, active)
-        return [
-            {"case_number": i + 1, "session_id": sid, "evaluated": sid in evaluated}
-            for i, sid in enumerate(active)
-        ]
+        by_row = evaluations_by_session(conn, active)
+        out = []
+        for i, sid in enumerate(active):
+            row = by_row.get(sid)
+            status = evaluation_status(row)
+            out.append(
+                {
+                    "case_number": i + 1,
+                    "session_id": sid,
+                    "evaluated": status == "complete",
+                    "status": status,
+                }
+            )
+        return out
     finally:
         conn.close()
 
@@ -273,43 +368,13 @@ def api_csv(dept_id: str) -> Response:
         dept, active = department_active_ids(dept_id)
         if not active:
             raise HTTPException(status_code=404, detail="لا توجد حالات في هذا القسم")
-        placeholders = ",".join(["?"] * len(active))
-        rows = conn.execute(
-            f"SELECT * FROM expert_evaluations WHERE session_id IN ({placeholders})",
-            active,
-        ).fetchall()
-        by_sid = {int(r["session_id"]): row_to_dict(r) for r in rows}
-        cols = [
-            "case_number",
-            "session_id",
-            "department_name",
-            "evaluated",
-            *RUBRIC_COLUMNS,
-            "doctor_notes",
-            "created_at",
-            "updated_at",
-        ]
-        buf = io.StringIO()
-        buf.write("\ufeff")
-        writer = csv.DictWriter(buf, fieldnames=cols)
-        writer.writeheader()
-        for i, sid in enumerate(active, start=1):
-            ev = by_sid.get(sid)
-            writer.writerow(
-                {
-                    "case_number": i,
-                    "session_id": sid,
-                    "department_name": dept.name_ar,
-                    "evaluated": "yes" if ev else "no",
-                    **{k: ev.get(k, "") if ev else "" for k in RUBRIC_COLUMNS},
-                    "doctor_notes": ev.get("doctor_notes", "") if ev else "",
-                    "created_at": ev.get("created_at", "") if ev else "",
-                    "updated_at": ev.get("updated_at", "") if ev else "",
-                }
-            )
+        sync_csv_exports(conn)
+        by_row = evaluations_by_session(conn, active)
+        by_sid = {sid: row_to_dict(r) for sid, r in by_row.items()}
+        content = build_csv_content(dept, active, by_sid)
         filename = f"expert_evaluations_{dept_id}_{datetime.utcnow().strftime('%Y%m%d')}.csv"
         return Response(
-            content=buf.getvalue(),
+            content=content,
             media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
@@ -373,6 +438,7 @@ def api_save_eval(session_id: int, dept_id: str, body: ExpertEvaluationSave) -> 
                 vals,
             )
         conn.commit()
+        sync_csv_exports(conn)
         out = conn.execute(
             "SELECT * FROM expert_evaluations WHERE session_id = ?",
             (session_id,),

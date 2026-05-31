@@ -18,16 +18,23 @@
       </div>
     </div>
     <p class="case-meta" id="case-meta"></p>
+    <div id="eval-incomplete-warning" class="eval-warning" hidden></div>
     <section class="chat-panel" id="chat-messages">جاري تحميل المحادثة...</section>
     <section class="rubric-panel">
       <h2>نموذج التقييم الطبي (Rubric)</h2>
       <form id="eval-form">
-        <div id="rubric-accordion"></div>
+        <div id="rubric-turn-items"></div>
+        <div id="rubric-chat-level"></div>
         <h3 style="margin-top:1.25rem;font-size:1.1rem">ملاحظات الطبيب</h3>
         <textarea id="doctor-notes" class="notes-area" placeholder="ملاحظات إضافية (اختياري)..."></textarea>
-        <div style="margin-top:1.25rem;text-align:center">
-          <button type="submit" class="btn btn-primary" id="btn-save">حفظ التقييم</button>
+        <div class="eval-actions">
+          <button type="submit" class="btn btn-primary" id="btn-save" disabled>حفظ التقييم</button>
+          <button type="button" class="btn btn-secondary" id="btn-next-case" disabled>الحالة التالية</button>
         </div>
+        <p class="eval-actions-labels">
+          <span>Save Evaluation</span>
+          <span>Next Case</span>
+        </p>
       </form>
     </section>
   </div>
@@ -49,6 +56,8 @@
         chest: "أمراض الصدر",
       };
 
+      let currentNav = null;
+
       document.getElementById("btn-back-dept").onclick = () => {
         window.location.href = `/expert/department?dept=${encodeURIComponent(deptId)}`;
       };
@@ -69,23 +78,34 @@
           apiGet(`${API}/sessions/${sid}/navigation?dept_id=${encodeURIComponent(deptId)}`),
         ]);
 
+        currentNav = nav;
+
         document.getElementById("case-meta").textContent =
           `${titles[deptId] || ""} — Case ${nav.case_number} من ${nav.total_cases} — Session ${sid}`;
 
         renderChat(chatEl, messages);
 
-        buildRubricForm(document.getElementById("rubric-accordion"), evaluation);
+        buildRubricForm(
+          document.getElementById("rubric-turn-items"),
+          document.getElementById("rubric-chat-level"),
+          evaluation,
+        );
         const notes = document.getElementById("doctor-notes");
         notes.value = (evaluation && evaluation.doctor_notes) || "";
 
         const prev = document.getElementById("btn-prev");
         const next = document.getElementById("btn-next");
+        const nextCase = document.getElementById("btn-next-case");
         prev.disabled = !nav.previous_session_id;
         next.disabled = !nav.next_session_id;
+        nextCase.disabled = !nav.next_session_id;
         prev.onclick = () => {
           if (nav.previous_session_id) go(nav.previous_session_id);
         };
         next.onclick = () => {
+          if (nav.next_session_id) go(nav.next_session_id);
+        };
+        nextCase.onclick = () => {
           if (nav.next_session_id) go(nav.next_session_id);
         };
 
@@ -109,9 +129,14 @@
             `${API}/sessions/${sid}/evaluation?dept_id=${encodeURIComponent(deptId)}`,
             body,
           );
-          showToast("تم حفظ التقييم بنجاح");
+          showToast("تم حفظ التقييم بنجاح — تم تحديث ملف CSV");
+          updateEvalUI();
         } catch (e) {
-          alert(e.message);
+          if (getMissingRubricFields().length > 0) {
+            scrollToFirstMissing();
+          } else {
+            alert(e.message);
+          }
         }
       };
 

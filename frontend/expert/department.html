@@ -60,13 +60,19 @@
         }
         cases.forEach((c) => {
           const card = document.createElement("div");
-          card.className = "case-card";
+          let cardClass = "case-card";
+          let badge = '<span class="badge badge-pending">غير مقيم</span>';
+          if (c.status === "complete" || c.evaluated) {
+            cardClass += "";
+            badge = '<span class="badge badge-done">تم التقييم</span>';
+          } else if (c.status === "incomplete") {
+            cardClass += " case-card--incomplete";
+            badge = '<span class="badge badge-incomplete">تقييم ناقص</span>';
+          }
+          card.className = cardClass;
           card.onclick = () => {
             window.location.href = `/expert/case?dept=${encodeURIComponent(deptId)}&session_id=${c.session_id}`;
           };
-          const badge = c.evaluated
-            ? '<span class="badge badge-done">تم التقييم</span>'
-            : '<span class="badge badge-pending">غير مقيم</span>';
           card.innerHTML = `
             <div>
               <h3>Case ${c.case_number}</h3>
