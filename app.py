@@ -498,6 +498,37 @@ def api_reset_evaluations(key: str | None = None) -> dict[str, Any]:
         conn.close()
 
 
+@app.get("/expert/reset-all", response_class=HTMLResponse)
+def reset_all_page(confirm: str | None = None) -> HTMLResponse:
+    if confirm != "yes":
+        return HTMLResponse(
+            """
+            <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"/>
+            <title>مسح التقييمات</title></head><body style="font-family:sans-serif;padding:2rem;text-align:center">
+            <p>مسح <strong>كل</strong> تقييمات الدكاترة؟ ستظهر كل الحالات غير مقيّمة.</p>
+            <p><a href="/expert/reset-all?confirm=yes" style="padding:0.75rem 1.5rem;background:#4a9fd8;color:#fff;border-radius:8px;text-decoration:none">نعم، امسح الكل</a></p>
+            <p><a href="/expert">إلغاء</a></p></body></html>
+            """,
+            status_code=200,
+        )
+    conn = get_conn()
+    try:
+        deleted = delete_all_evaluations(conn)
+    finally:
+        conn.close()
+    return HTMLResponse(
+        f"""
+        <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"/>
+        <meta http-equiv="refresh" content="2;url=/expert"/>
+        <title>تم المسح</title></head><body style="font-family:sans-serif;padding:2rem;text-align:center">
+        <p>تم مسح {deleted} تقييم. كل الحالات الآن <strong>غير مقيّمة</strong>.</p>
+        <p>جاري التحويل للصفحة الرئيسية...</p>
+        <p><a href="/expert">الأقسام</a></p></body></html>
+        """,
+        status_code=200,
+    )
+
+
 @app.get("/api/expert/sessions/{session_id}/navigation")
 def api_nav(session_id: int, dept_id: str) -> dict[str, Any]:
     _, active = department_active_ids(dept_id)
