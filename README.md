@@ -47,6 +47,8 @@ On Render, files inside the web service are **temporary** — SQLite evaluations
 
 Locally (without `DATABASE_URL`) evaluations still use `data/expert_evaluations.sqlite`.
 
+## Deploy (GitHub + domain)
+
 1. Push this repo to GitHub (cases are already in `data/expert_cases.json`).
 2. Deploy on a server that runs FastAPI/uvicorn (Render, Railway, VPS, etc.).
 3. Point your domain to that server.
