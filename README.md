@@ -22,14 +22,30 @@ This folder is fully dedicated to the expert evaluation website (`/expert`) and 
 
 Doctor evaluations are saved locally in `data/expert_evaluations.sqlite` (created automatically; not committed to git).
 
-## Deploy on Render
+## Deploy on Render (persistent evaluations)
 
-- **Start command:** `uvicorn app:app --host 0.0.0.0 --port $PORT`
-- **Build command:** `pip install -r requirements.txt`
-- **Python version:** `3.11.9` via `.python-version` (Render ignores `runtime.txt`; that file is for Heroku)
-- If the build still picks 3.14, set environment variable `PYTHON_VERSION` = `3.11.9` in Render → Environment
+On Render, files inside the web service are **temporary** — SQLite evaluations can disappear after redeploy or restart.
 
-## Deploy (GitHub + domain)
+**Use Render PostgreSQL** so doctor evaluations are saved permanently.
+
+### Step-by-step on Render
+
+1. **Dashboard** → **New +** → **PostgreSQL**
+2. Name: e.g. `expert-evaluations` → **Create Database**
+3. Open your **Web Service** (the expert site)
+4. **Environment** → **Add from Database** → select the PostgreSQL you created
+5. Render adds `DATABASE_URL` automatically — the app uses it on startup
+6. **Manual Deploy** → **Deploy latest commit**
+7. Check: open `https://YOUR-APP.onrender.com/health`  
+   - `"database_backend": "postgresql"` = evaluations are persistent
+
+### Web service settings
+
+- **Build:** `pip install -r requirements.txt`
+- **Start:** `uvicorn app:app --host 0.0.0.0 --port $PORT`
+- **Python:** `3.11.9` (`.python-version` or `PYTHON_VERSION`)
+
+Locally (without `DATABASE_URL`) evaluations still use `data/expert_evaluations.sqlite`.
 
 1. Push this repo to GitHub (cases are already in `data/expert_cases.json`).
 2. Deploy on a server that runs FastAPI/uvicorn (Render, Railway, VPS, etc.).
