@@ -18,6 +18,11 @@
       <p id="export-stats" class="export-stats"></p>
       <p class="export-hint">بعد الانتهاء من تقييم الحالات، نزّل ملف CSV وأرسله لفريق المشروع.</p>
       <a id="btn-csv" class="btn btn-primary" href="#">تنزيل ملف CSV</a>
+      <p style="margin-top:1rem">
+        <button type="button" class="btn btn-secondary" id="btn-reset-all" style="font-size:0.9rem">
+          مسح كل التقييمات (إرجاع غير مقيّم)
+        </button>
+      </p>
     </section>
     <div id="case-list" class="case-list loading">جاري التحميل...</div>
   </div>
@@ -58,6 +63,19 @@
           list.innerHTML = "<p class='loading'>لا توجد محادثات في هذا النطاق.</p>";
           return;
         }
+        document.getElementById("btn-reset-all").onclick = async () => {
+          if (!confirm("مسح كل تقييمات هذا القسم والموقع؟ ستظهر كل الحالات غير مقيّمة.")) return;
+          try {
+            const r = await fetch(`${API}/evaluations/reset`, { method: "POST" });
+            if (!r.ok) throw new Error(await r.text());
+            const data = await r.json();
+            alert(data.message || "تم المسح");
+            location.reload();
+          } catch (e) {
+            alert(e.message);
+          }
+        };
+
         cases.forEach((c) => {
           const card = document.createElement("div");
           let cardClass = "case-card";

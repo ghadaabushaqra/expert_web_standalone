@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
+import shutil
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -212,6 +214,22 @@ def build_csv_content(dept: ExpertDepartment, active: list[int], by_sid: dict[in
             }
         )
     return buf.getvalue()
+
+
+def require_admin(key: str | None) -> None:
+    expected = os.getenv("EXPERT_ADMIN_KEY", "").strip()
+    if expected and key != expected:
+        raise HTTPException(status_code=403, detail="غير مصرح")
+
+
+def delete_all_evaluations(conn: sqlite3.Connection) -> int:
+    n = conn.execute("SELECT COUNT(*) FROM expert_evaluations").fetchone()[0]
+    conn.execute("DELETE FROM expert_evaluations")
+    conn.commit()
+    if EXPORT_DIR.exists():
+        shutil.rmtree(EXPORT_DIR)
+    sync_csv_exports(conn)
+    return int(n)
 
 
 def sync_csv_exports(conn: sqlite3.Connection) -> None:
@@ -444,6 +462,38 @@ def api_save_eval(session_id: int, dept_id: str, body: ExpertEvaluationSave) -> 
             (session_id,),
         ).fetchone()
         return row_to_dict(out)
+    finally:
+        conn.close()
+
+
+@app.delete("/api/expert/sessions/{session_id}/evaluation")
+def api_delete_eval(session_id: int, dept_id: str, key: str | None = None) -> dict[str, Any]:
+    require_admin(key)
+    conn = get_conn()
+    try:
+        _, active = department_active_ids(dept_id)
+        if session_id not in active:
+            raise HTTPException(status_code=404, detail="الجلسة غير ضمن هذا القسم")
+        cur = conn.execute(
+            "DELETE FROM expert_evaluations WHERE session_id = ?",
+            (session_id,),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="لا يوجد تقييم لهذه الحالة")
+        sync_csv_exports(conn)
+        return {"ok": True, "session_id": session_id, "message": "تم مسح التقييم"}
+    finally:
+        conn.close()
+
+
+@app.post("/api/expert/evaluations/reset")
+def api_reset_evaluations(key: str | None = None) -> dict[str, Any]:
+    require_admin(key)
+    conn = get_conn()
+    try:
+        deleted = delete_all_evaluations(conn)
+        return {"ok": True, "deleted_count": deleted, "message": "جميع الحالات أصبحت غير مقيّمة"}
     finally:
         conn.close()
 
