@@ -1,29 +1,22 @@
-"""Delete all saved doctor evaluations so every case shows as not evaluated."""
+"""Local dev only: clear all evaluations (SQLite or DATABASE_URL). Not exposed on the website."""
 from __future__ import annotations
 
 import shutil
-import sqlite3
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DB = ROOT / "data" / "expert_evaluations.sqlite"
+sys.path.insert(0, str(ROOT))
+
+from db_store import db_conn, delete_all_evaluations, database_backend  # noqa: E402
+
 EXPORT_DIR = ROOT / "data" / "exports"
 
 
 def main() -> None:
-    if DB.exists():
-        conn = sqlite3.connect(DB)
-        try:
-            n = conn.execute("SELECT COUNT(*) FROM expert_evaluations").fetchone()[0]
-            conn.execute("DELETE FROM expert_evaluations")
-            conn.commit()
-            print(f"Deleted {n} evaluation(s) from {DB}")
-        finally:
-            conn.close()
-    else:
-        print(f"No database at {DB} (nothing to delete)")
-
+    with db_conn() as conn:
+        n = delete_all_evaluations(conn)
+    print(f"Deleted {n} evaluation(s) via {database_backend()}")
     if EXPORT_DIR.exists():
         shutil.rmtree(EXPORT_DIR)
         print(f"Removed {EXPORT_DIR}")

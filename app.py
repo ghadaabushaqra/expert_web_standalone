@@ -19,8 +19,6 @@ from db_store import (
     RUBRIC_COLUMNS,
     database_backend,
     db_conn,
-    delete_all_evaluations,
-    delete_evaluation,
     ensure_tables,
     evaluation_status,
     fetch_evaluations,
@@ -148,12 +146,6 @@ def build_csv_content(dept: ExpertDepartment, active: list[int], by_sid: dict[in
     return buf.getvalue()
 
 
-def require_admin(key: str | None) -> None:
-    expected = os.getenv("EXPERT_ADMIN_KEY", "").strip()
-    if expected and key != expected:
-        raise HTTPException(status_code=403, detail="غير مصرح")
-
-
 def sync_csv_exports() -> None:
     if database_backend() != "sqlite":
         return
@@ -191,15 +183,6 @@ def sync_csv_exports() -> None:
             for ev in sorted(master_cols_seen, key=lambda x: int(x["session_id"])):
                 writer.writerow({k: ev.get(k, "") for k in cols})
             (EXPORT_DIR / "expert_evaluations_all.csv").write_text(buf.getvalue(), encoding="utf-8")
-
-
-def reset_all_evaluations() -> int:
-    with db_conn() as conn:
-        deleted = delete_all_evaluations(conn)
-    if EXPORT_DIR.exists():
-        shutil.rmtree(EXPORT_DIR)
-    sync_csv_exports()
-    return deleted
 
 
 app = FastAPI(title="Expert Evaluation Standalone")
@@ -360,54 +343,6 @@ def api_save_eval(session_id: int, dept_id: str, body: ExpertEvaluationSave) -> 
         result = save_evaluation(conn, session_id, dept.name_ar, data, now)
     sync_csv_exports()
     return result
-
-
-@app.delete("/api/expert/sessions/{session_id}/evaluation")
-def api_delete_eval(session_id: int, dept_id: str, key: str | None = None) -> dict[str, Any]:
-    require_admin(key)
-    with db_conn() as conn:
-        _, active = department_active_ids(dept_id)
-        if session_id not in active:
-            raise HTTPException(status_code=404, detail="الجلسة غير ضمن هذا القسم")
-        deleted = delete_evaluation(conn, session_id)
-        if deleted == 0:
-            raise HTTPException(status_code=404, detail="لا يوجد تقييم لهذه الحالة")
-    sync_csv_exports()
-    return {"ok": True, "session_id": session_id, "message": "تم مسح التقييم"}
-
-
-@app.post("/api/expert/evaluations/reset")
-def api_reset_evaluations(key: str | None = None) -> dict[str, Any]:
-    require_admin(key)
-    deleted = reset_all_evaluations()
-    return {"ok": True, "deleted_count": deleted, "message": "جميع الحالات أصبحت غير مقيّمة"}
-
-
-@app.get("/expert/reset-all", response_class=HTMLResponse)
-def reset_all_page(confirm: str | None = None) -> HTMLResponse:
-    if confirm != "yes":
-        return HTMLResponse(
-            """
-            <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"/>
-            <title>مسح التقييمات</title></head><body style="font-family:sans-serif;padding:2rem;text-align:center">
-            <p>مسح <strong>كل</strong> تقييمات الدكاترة؟ ستظهر كل الحالات غير مقيّمة.</p>
-            <p><a href="/expert/reset-all?confirm=yes" style="padding:0.75rem 1.5rem;background:#4a9fd8;color:#fff;border-radius:8px;text-decoration:none">نعم، امسح الكل</a></p>
-            <p><a href="/expert">إلغاء</a></p></body></html>
-            """,
-            status_code=200,
-        )
-    deleted = reset_all_evaluations()
-    return HTMLResponse(
-        f"""
-        <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"/>
-        <meta http-equiv="refresh" content="2;url=/expert"/>
-        <title>تم المسح</title></head><body style="font-family:sans-serif;padding:2rem;text-align:center">
-        <p>تم مسح {deleted} تقييم. كل الحالات الآن <strong>غير مقيّمة</strong>.</p>
-        <p>جاري التحويل للصفحة الرئيسية...</p>
-        <p><a href="/expert">الأقسام</a></p></body></html>
-        """,
-        status_code=200,
-    )
 
 
 @app.get("/api/expert/sessions/{session_id}/navigation")

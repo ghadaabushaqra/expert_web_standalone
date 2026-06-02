@@ -130,7 +130,7 @@
             `${API}/sessions/${sid}/evaluation?dept_id=${encodeURIComponent(deptId)}`,
             body,
           );
-          showToast("تم حفظ التقييم بنجاح — تم تحديث ملف CSV");
+          showToast("تم حفظ التقييم في قاعدة البيانات");
           updateEvalUI();
         } catch (e) {
           alert(e.message);
